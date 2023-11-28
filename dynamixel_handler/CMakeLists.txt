@@ -10,7 +10,7 @@ project(dynamixel_handler)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
-  message_generation #この行を追加
+  message_generation
 )
 
 ## System dependencies are found with CMake's conventions
@@ -105,7 +105,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES dynamixel_handler
- CATKIN_DEPENDS roscpp std_msgs message_runtime
+   CATKIN_DEPENDS roscpp std_msgs message_runtime
 #  DEPENDS system_lib
 )
 

@@ -20,6 +20,7 @@ struct Dynamixel{
 DynamixelComunicator dyn_comm;
 std::vector<int> id_list;
 std::vector<Dynamixel> dynamixel_chain;
+bool is_updated = false;
 
 // int64_t deg2pulse(double deg) { return deg * 4096.0 / 360.0 + 2048; }
 // double  pulse2deg(int64_t pulse) { return (pulse - 2048 ) * 360.0 / 4096.0; }
@@ -128,6 +129,7 @@ void CallBackOfDynamixelCommand(const dynamixel_handler::DynamixelCmd& msg) {
             assert(0 <= id && id <= dynamixel_chain.size());
             dynamixel_chain[id].goal_position = rad2pulse(msg.goal_angles[i]);
         }
+        is_updated = true;
     }
 }
 
@@ -157,7 +159,6 @@ int main(int argc, char **argv) {
     ros::Rate rate(loop_rate);
     while(ros::ok()) {
         // Dynamixelから現在角をRead & topicをPublish
-
         SyncReadPosition();
         dynamixel_handler::DynamixelState msg;
         msg.ids.resize(id_list.size());
@@ -170,12 +171,16 @@ int main(int argc, char **argv) {
         }
         pub_dyn_state.publish(msg);
 
+        // デバック用
         if (varbose) ShowDynamixelChain();
 
         // topicをSubscribe & Dynamixelへ目標角をWrite
         ros::spinOnce();
         rate.sleep();
-        SyncWritePosition();
+        if( is_updated ) {
+            SyncWritePosition();
+            is_updated = false;
+        } 
     }
 }
 
