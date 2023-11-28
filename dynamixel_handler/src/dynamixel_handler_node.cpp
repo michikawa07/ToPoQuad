@@ -51,7 +51,8 @@ void InitDynamixelChain(int id_max){
     for (auto id : id_list) {
         dyn_comm.Write(id, torque_enable_x, TORQUE_DISABLE);
         dyn_comm.Write(id, operating_mode_x, OPERATING_MODE_POSITION);
-        dyn_comm.Write(id, profile_acceleration_x, 5000); // 0~32767 数字は適当
+        dyn_comm.Write(id, profile_acceleration_x, 500); // 0~32767 数字は適当
+        dyn_comm.Write(id, profile_velocity_x, 100); // 0~32767 数字は適当
         int present_pos = dyn_comm.Read(id, present_position_x);
         dyn_comm.Write(id, goal_position_x, present_pos);
         dyn_comm.Write(id, torque_enable_x, TORQUE_ENABLE);
@@ -78,7 +79,7 @@ void SyncWritePosition(){
     dyn_comm.SyncWrite(id_list.size(), servo_id_list, goal_position_x, data_int_list);
 }
 
-void SyncReadPosition(){
+bool SyncReadPosition(){
     uint8_t servo_id_list[id_list.size()];
     int64_t data_int_list[id_list.size()];
     uint8_t read_id_list[id_list.size()];
@@ -98,6 +99,7 @@ void SyncReadPosition(){
     // 読み込んだデータをdynamixel_chainに反映
     for (size_t i = 0; i < id_list.size(); i++) // data_int_listの初期値がpresent_positionなので，read失敗時はそのままになる．
         dynamixel_chain[id_list[i]].present_position = data_int_list[i]; 
+    return num_success!=0 ? true : false; // 1つでも成功したら成功とする.あえて冗長に書いている.
 }
 
 void ShowDynamixelChain(){
@@ -122,6 +124,7 @@ void CallBackOfDynamixelCommand(const dynamixel_handler::DynamixelCmd& msg) {
     if (msg.command == "init") InitDynamixelChain(dynamixel_chain.size());
     if (msg.command == "reboot") { 
         for (auto id : msg.ids) RebootDynamixel(id);
+        if (msg.ids.size() == 0) for (auto id : id_list) RebootDynamixel(id);
     }
     if (msg.command == "write") {
         for (int i = 0; i < msg.ids.size(); i++) {
@@ -159,17 +162,19 @@ int main(int argc, char **argv) {
     ros::Rate rate(loop_rate);
     while(ros::ok()) {
         // Dynamixelから現在角をRead & topicをPublish
-        SyncReadPosition();
-        dynamixel_handler::DynamixelState msg;
-        msg.ids.resize(id_list.size());
-        msg.present_angles.resize(id_list.size());
-        msg.goal_angles.resize(id_list.size());
-        for (size_t i = 0; i < id_list.size(); i++) {
-            msg.ids[i] = id_list[i];
-            msg.present_angles[i] = pulse2rad(dynamixel_chain[id_list[i]].present_position);
-            msg.goal_angles[i]    = pulse2rad(dynamixel_chain[id_list[i]].goal_position);
+        bool is_success = SyncReadPosition();
+        if ( is_success ) {
+            dynamixel_handler::DynamixelState msg;
+            msg.ids.resize(id_list.size());
+            msg.present_angles.resize(id_list.size());
+            msg.goal_angles.resize(id_list.size());
+            for (size_t i = 0; i < id_list.size(); i++) {
+                msg.ids[i] = id_list[i];
+                msg.present_angles[i] = pulse2rad(dynamixel_chain[id_list[i]].present_position);
+                msg.goal_angles[i]    = pulse2rad(dynamixel_chain[id_list[i]].goal_position);
+            }
+            pub_dyn_state.publish(msg);
         }
-        pub_dyn_state.publish(msg);
 
         // デバック用
         if (varbose) ShowDynamixelChain();

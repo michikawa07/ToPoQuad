@@ -30,11 +30,12 @@ class Joint {
 
 class Leg {
     public:
-        Leg(): is_updated_(false), hip_yaw_(Joint(1)), hip_pitch_(Joint(2)), knee_pitch_(Joint(3)) {}
+        Leg(): is_updated_(true), hip_yaw_(Joint(1)), hip_pitch_(Joint(2)), knee_pitch_(Joint(3)) {}
         void initialize(const Joint& hip_yaw, const Joint& hip_pitch, const Joint& knee_pitch) {
             hip_yaw_ = hip_yaw;
             hip_pitch_ = hip_pitch;
             knee_pitch_ = knee_pitch;
+            is_updated_ = true;
         }
         void SetAngles(const std::vector<double>& angles) {
             if (angles.size() != 3) {
@@ -70,21 +71,23 @@ int main(int argc, char **argv) {
     ros::NodeHandle nh;
     ros::NodeHandle nh_p("~");
     
-    leg_FR.initialize( Joint{  4, +1.0,   0.0 , Eigen::Vector3d(0.0, 0.0, 0.0) },
-                       Joint{  3, +1.0, M_PI/2, Eigen::Vector3d(0.0, 0.0, 0.0) },
-                       Joint{  2, +1.0, M_PI/2, Eigen::Vector3d(0.0, 0.0, 0.0) }  );
-    leg_FL.initialize( Joint{ 14, +1.0,   0.0 , Eigen::Vector3d(0.0, 0.0, 0.0) },
-                       Joint{ 13, +1.0, M_PI/2, Eigen::Vector3d(0.0, 0.0, 0.0) },
-                       Joint{ 12, +1.0, M_PI/2, Eigen::Vector3d(0.0, 0.0, 0.0) }  ); 
-    leg_BR.initialize( Joint{ 24, +1.0,   0.0 , Eigen::Vector3d(0.0, 0.0, 0.0) },
-                       Joint{ 23, +1.0, M_PI/2, Eigen::Vector3d(0.0, 0.0, 0.0) },
-                       Joint{ 22, +1.0, M_PI/2, Eigen::Vector3d(0.0, 0.0, 0.0) }  );
+    leg_BR.initialize( Joint{  4, -1.0,   0.0 , Eigen::Vector3d(0.0, 0.0, 0.0) },
+                       Joint{  3, +1.0, M_PI/4, Eigen::Vector3d(0.0, 0.0, 0.0) },
+                       Joint{  2, +1.0, M_PI/4, Eigen::Vector3d(0.0, 0.0, 0.0) }  );
+    leg_FR.initialize( Joint{ 14, -1.0,   0.0 , Eigen::Vector3d(0.0, 0.0, 0.0) },
+                       Joint{ 13, +1.0, M_PI/4, Eigen::Vector3d(0.0, 0.0, 0.0) },
+                       Joint{ 12, +1.0, M_PI/4, Eigen::Vector3d(0.0, 0.0, 0.0) }  ); 
+    leg_FL.initialize( Joint{ 24, +1.0,   0.0 , Eigen::Vector3d(0.0, 0.0, 0.0) },
+                       Joint{ 23, +1.0, M_PI/4, Eigen::Vector3d(0.0, 0.0, 0.0) },
+                       Joint{ 22, +1.0, M_PI/4, Eigen::Vector3d(0.0, 0.0, 0.0) }  );
     leg_BL.initialize( Joint{ 34, +1.0,   0.0 , Eigen::Vector3d(0.0, 0.0, 0.0) },
-                       Joint{ 33, +1.0, M_PI/2, Eigen::Vector3d(0.0, 0.0, 0.0) },
-                       Joint{ 32, +1.0, M_PI/2, Eigen::Vector3d(0.0, 0.0, 0.0) }  );           
+                       Joint{ 33, +1.0, M_PI/4, Eigen::Vector3d(0.0, 0.0, 0.0) },
+                       Joint{ 32, +1.0, M_PI/4, Eigen::Vector3d(0.0, 0.0, 0.0) }  );           
 
     ros::Subscriber sub_leg_cmd   = nh.subscribe("/legs/cmd", 10, CallBackOfLegCmd);
     ros::Publisher  pub_dyn_cmd   = nh.advertise<dynamixel_handler::DynamixelCmd>("/dynamixel/cmd", 10);
+
+    ros::Duration(1).sleep();
 
     // ros::Subscriber sub_dyn_state   = nh.subscribe("/dynamixel/state",   10, CallBackOfDynamixelState);  // サーボの角度をsubscribe
     // ros::Publisher  pub_leg_state   = nh.advertise<dynamixel_handler::DynamixelCmd>("/legs/state", 10); // サーボの角度を関節の状態に変換してpublish
@@ -102,8 +105,14 @@ int main(int argc, char **argv) {
             dyn_msg.goal_angles.push_back(leg.get().hip_pitch_.servo_angle_);
             dyn_msg.goal_angles.push_back(leg.get().knee_pitch_.servo_angle_);
             leg.get().is_updated_ = false;
+
+            ROS_INFO("%f, %f, %f", leg.get().hip_yaw_.servo_angle_, leg.get().hip_pitch_.servo_angle_, leg.get().knee_pitch_.servo_angle_);
         }
-        if (dyn_msg.ids.size() != 0) pub_dyn_cmd.publish(dyn_msg);
+
+        if (dyn_msg.ids.size() != 0) {
+            pub_dyn_cmd.publish(dyn_msg);
+            ROS_INFO("publish, id size: %d", dyn_msg.ids.size());
+        }
 
         ros::spinOnce();
         rate.sleep();
