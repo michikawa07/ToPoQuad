@@ -14,12 +14,12 @@ $ rosrun dynamixel_handler dynamixel_handler_node
 ```
 dynamixelとのやり取り, 1から{指定したid}までのdynamixelを自動で見つけてくれる．
 {指定したid}の指定方法はros paramにしてあるがlaunchファイルを書く元気がない．
-角度指令をsubして，dynamixelを位置制御する．
+dynamixelへの角度指令をsubして，dynamixelを位置制御する．
 
 ```
 $ rosrun topoquad_master leg_node
 ```
-ロボットの関節にどのIDのdynamixelがどんな向きでついているかを知っているノード
+ロボットの関節にどのIDのdynamixelがどんな向きでついているかを知っているノード．
 関節角の指令をsubして，dynamixelへの角度指令に直してpubしている．
 
 ```
