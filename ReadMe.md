@@ -23,7 +23,7 @@ $ rosrun topoquad_master leg_node
 関節角の指令をsubして，dynamixelへの角度指令に直してpubしている．
 
 ```
-$ rosrun topoquad_control rosrun topoquad_control sample_control_spider.py
+$ rosrun topoquad_control sample_control_spider.py
 ```
 ロボットの制御を行うためのノード．関節角の指令をpublishし続ける．
 
