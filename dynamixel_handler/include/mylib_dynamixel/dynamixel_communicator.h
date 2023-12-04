@@ -9,6 +9,8 @@
 #include "download/port_handler.h"
 #include "dynamixel_parameters.h"
 
+using std::vector;
+
 class DynamixelComunicator {
  public:
   enum FactoryResetLevel {
@@ -56,12 +58,22 @@ class DynamixelComunicator {
   void FactoryReset(uint8_t servo_id, FactoryResetLevel level);
   bool Ping(uint8_t servo_id);
 
-  void Write(uint8_t servo_id, DynamixelParameter dp, int64_t data_int);
   // void clearMultiTurn(uint8_t servo_id);
   // unsigned short updateCRC(uint16_t crc_accum, uint8_t *data_blk_ptr, uint16_t data_blk_size);
+  void Write(uint8_t servo_id, DynamixelParameter dp, int64_t data_int);
   int64_t Read(uint8_t servo_id, DynamixelParameter dp);
-  void SyncWrite(uint8_t num_servo, uint8_t servo_id_list[], DynamixelParameter dp, int64_t data_int_list[]);
-  uint8_t SyncRead(uint8_t num_servo, uint8_t servo_id_list[], DynamixelParameter dp, int64_t data_int_list[], uint8_t read_id_list[]);
+  void SyncWrite(const vector<uint8_t>& servo_id_list, DynamixelParameter dp, const vector<int64_t>& data_int_list);
+  uint8_t SyncRead(const vector<uint8_t>& servo_id_list, DynamixelParameter dp,      vector<int64_t>& data_int_list, vector<uint8_t>& read_id_list);
+  uint8_t SyncRead_fast(const vector<uint8_t>& servo_id_list, DynamixelParameter dp, vector<int64_t>& data_int_list, vector<uint8_t>& read_id_list);
+//   void BulkWrite(uint8_t num_servo, uint8_t servo_id_list[], DynamixelParameter dp[], int64_t data_int_list[]);
+//   int64_t BulkRead(uint8_t num_servo, uint8_t servo_id_list[], DynamixelParameter dp[], int64_t data_int_list[], uint8_t read_id_list[]);
+	// ここまではDynamixelSDKと同じ関数の独自実装，これ以降は独自関数
+//   void RangeWrite(uint8_t servo_id, DynamixelParameter dp, int64_t data_int);
+//   void RangeRead(uint8_t servo_id, const vector<DynamixelParameter>& dp_list, vector<int64_t>& data_int_list);
+//   void SyncRangeWrite(uint8_t num_servo, uint8_t servo_id_list[], DynamixelParameter dp, int64_t data_int_list[]);
+//   uint8_t SyncRangeRead(uint8_t num_servo, uint8_t servo_id_list[], DynamixelParameter dp, int64_t data_int_list[], uint8_t read_id_list[]);
+//   void BulkRangeWrite(uint8_t num_servo, uint8_t servo_id_list[], DynamixelParameter dp[], int64_t data_int_list[]);
+//   int64_t BulkRangeRead(uint8_t num_servo, uint8_t servo_id_list[], DynamixelParameter dp[], int64_t data_int_list[], uint8_t read_id_list[]);
 
  private:
   uint16_t CalcChecksum(uint8_t data[], uint8_t length);

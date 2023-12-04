@@ -18,7 +18,7 @@ struct Dynamixel{
 };
 
 DynamixelComunicator dyn_comm;
-std::vector<int> id_list;
+std::vector<uint8_t> id_list;
 std::vector<Dynamixel> dynamixel_chain;
 bool is_updated = false;
 
@@ -69,25 +69,19 @@ void InitDynamixelChain(int id_max){
 }
 
 void SyncWritePosition(){
-    uint8_t servo_id_list[id_list.size()];
-    int64_t data_int_list[id_list.size()];
-
-    for (size_t i = 0; i < id_list.size(); i++) {
-        servo_id_list[i] = id_list[i];
-        data_int_list[i] = dynamixel_chain[id_list[i]].goal_position;
-    }
-    dyn_comm.SyncWrite(id_list.size(), servo_id_list, goal_position_x, data_int_list);
+	 //id_list.size()のベクトルを作成
+    std::vector<int64_t> data_int_list(id_list.size());
+    for (size_t i = 0; i < id_list.size(); i++) data_int_list[i] = dynamixel_chain[id_list[i]].goal_position;
+    dyn_comm.SyncWrite(id_list, goal_position_x, data_int_list);
 }
 
 bool SyncReadPosition(){
-    uint8_t servo_id_list[id_list.size()];
-    int64_t data_int_list[id_list.size()];
-    uint8_t read_id_list[id_list.size()];
-    for (size_t i = 0; i < id_list.size(); i++) servo_id_list[i] = id_list[i];
+    std::vector<int64_t> data_int_list(id_list.size());
+    std::vector<uint8_t> read_id_list(id_list.size());
     for (size_t i = 0; i < id_list.size(); i++) data_int_list[i] = dynamixel_chain[id_list[i]].present_position; // read失敗時に初期化されないままだと危険なので．
     for (size_t i = 0; i < id_list.size(); i++) read_id_list[i]  = 255; // あり得ない値(idは0~252)に設定して，read失敗時に検出できるようにする
 
-    int num_success = dyn_comm.SyncRead(id_list.size(), servo_id_list, present_position_x, data_int_list, read_id_list);
+    int num_success = dyn_comm.SyncRead_fast(id_list, present_position_x, data_int_list, read_id_list);
     // エラー処理
     if (num_success != id_list.size()){
         ROS_WARN("SyncReadPosition: %d servo(s) failed to read", (int)(id_list.size() - num_success));
@@ -99,7 +93,8 @@ bool SyncReadPosition(){
     // 読み込んだデータをdynamixel_chainに反映
     for (size_t i = 0; i < id_list.size(); i++) // data_int_listの初期値がpresent_positionなので，read失敗時はそのままになる．
         dynamixel_chain[id_list[i]].present_position = data_int_list[i]; 
-    return num_success!=0 ? true : false; // 1つでも成功したら成功とする.あえて冗長に書いている.
+
+    return num_success>0 ? true : false; // 1つでも成功したら成功とする.あえて冗長に書いている.
 }
 
 void ShowDynamixelChain(){
