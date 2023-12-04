@@ -71,10 +71,10 @@ class DynamixelParameter {
     value_per_bit_ = value_per_bit;
   }
 
-  uint16_t address(){ return address_; }
-  DynamixelDataType data_type(){ return data_type_; }
-  uint16_t size(){ return size_; }
-  double value_per_bit(){ return value_per_bit_; }
+  uint16_t address() const { return address_; }
+  DynamixelDataType data_type() const { return data_type_; }
+  uint16_t size() const { return size_; }
+  double value_per_bit() const { return value_per_bit_; }
 
  private:
   uint16_t address_;

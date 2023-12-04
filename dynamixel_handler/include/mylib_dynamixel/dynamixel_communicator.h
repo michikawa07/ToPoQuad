@@ -69,7 +69,7 @@ class DynamixelComunicator {
 //   int64_t BulkRead(uint8_t num_servo, uint8_t servo_id_list[], DynamixelParameter dp[], int64_t data_int_list[], uint8_t read_id_list[]);
 	// ここまではDynamixelSDKと同じ関数の独自実装，これ以降は独自関数
 //   void RangeWrite(uint8_t servo_id, DynamixelParameter dp, int64_t data_int);
-//   void RangeRead(uint8_t servo_id, const vector<DynamixelParameter>& dp_list, vector<int64_t>& data_int_list);
+  void RangeRead(uint8_t servo_id, const vector<DynamixelParameter>& dp_list, vector<int64_t>& data_int_list);
 //   void SyncRangeWrite(uint8_t num_servo, uint8_t servo_id_list[], DynamixelParameter dp, int64_t data_int_list[]);
 //   uint8_t SyncRangeRead(uint8_t num_servo, uint8_t servo_id_list[], DynamixelParameter dp, int64_t data_int_list[], uint8_t read_id_list[]);
 //   void BulkRangeWrite(uint8_t num_servo, uint8_t servo_id_list[], DynamixelParameter dp[], int64_t data_int_list[]);

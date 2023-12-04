@@ -621,3 +621,191 @@ uint8_t DynamixelComunicator::SyncRead( const vector<uint8_t>& servo_id_list, Dy
   }
   return num_read;
 }
+
+
+/** @fn
+ * @brief 複数のDynamixelの同一のアドレスから情報を読み込む,パケットを最小限にすることで高速化したもの．サーボ1つでも失敗するとすべて読み込めない
+ * @param vector<uint8_t> servo_id_list 読み込むサーボのIDのリスト
+ * @param DynamixelParameter dp 対象のパラメータのインスタンス
+ * @param vector<int64_t> data_int_list 読み込んだデータのリスト．intのまま
+ * @param vector<uint8_t> read_id_list 読み込めたサーボのIDのリスト
+ * @return uint8_t 読み込めたか個数
+ */
+uint8_t DynamixelComunicator::SyncRead_fast(const vector<uint8_t>& servo_id_list, DynamixelParameter dp,
+                            vector<int64_t>& data_int_list, vector<uint8_t>& read_id_list) {
+
+	uint8_t num_servo = servo_id_list.size();
+	uint8_t send_data[128] = {0};
+	uint16_t length = num_servo+7;
+	send_data[0] = HEADER[0];
+	send_data[1] = HEADER[1];
+	send_data[2] = HEADER[2];
+	send_data[3] = HEADER[3];
+	send_data[4] = 0xFE;  // id
+	send_data[5] = length & 0xFF;
+	send_data[6] = (length>>8) & 0xFF;
+	send_data[7] = INSTRUCTION_FAST_SYNC_READ;  // instruction
+	send_data[8] = dp.address() & 0xFF;
+	send_data[9] = (dp.address()>>8) & 0xFF;
+	send_data[10] = dp.size() & 0xFF;
+	send_data[11] = (dp.size()>>8) & 0xFF;
+	for(int i_servo=0; i_servo<num_servo; i_servo++) {
+		send_data[12+i_servo] = servo_id_list[i_servo];
+	}
+	uint16_t sum = CalcChecksum(send_data, 12+num_servo);
+	send_data[12+num_servo] = sum & 0xFF;
+	send_data[13+num_servo] = (sum>>8) & 0xFF;
+
+	port_handler_->clearPort();
+	port_handler_->writePort(send_data, 14+num_servo);
+
+	// シリアルの読み込み処理，パケットの読み込みはここの一回だけ
+	uint8_t length_a_servo = 4+dp.size();
+	uint8_t read_data[1023];
+	uint16_t length_read_data = 8+length_a_servo*num_servo;
+	port_handler_->setPacketTimeout( uint16_t(length_read_data) );
+	while(port_handler_->getBytesAvailable() < length_read_data) {
+		if (port_handler_->isPacketTimeout()) {
+		printf("Fast Sync Read Error(time out) : available bytes %d / %d\n", port_handler_->getBytesAvailable(), length_read_data);
+		error_last_read_ = true;
+		return 0; //個
+		}
+	}
+
+	// パケットの読み込み
+	if (port_handler_->readPort(read_data, length_read_data) == -1) {
+		printf("Fast Sync Read Error(read port)\n");
+		error_last_read_ = true;
+		return 0; //個
+	}
+	// 読み込めたパケットのヘッダーの確認
+	if (read_data[0] != HEADER[0] ||
+		 read_data[1] != HEADER[1] ||
+		 read_data[2] != HEADER[2] ||
+		 read_data[3] != HEADER[3]) {
+		printf("Fast Sync Read Error(header)\n");
+		error_last_read_ = true;
+		return 0; //個
+	}
+	// 読み込めたパケットのIDがブロードキャスト用のものか確認
+	if ( read_data[4] != 0xFE ) {
+		printf("Fast Sync Read Error(broad cast id)\n");
+		error_last_read_ = true;
+		return 0; //個
+	}
+
+	// 読み込めたパケットを個々のサーボのパケットに分割して処理,チェックサムの処理は行わない
+	for(int i_servo=0; i_servo<num_servo; i_servo++) {
+		uint8_t id = (uint8_t)read_data[9 + i_servo*length_a_servo]; // servo id
+			if ( id != servo_id_list[i_servo] ) {
+				printf("Fast Sync Read Error(packet id) : id [%d]\n", servo_id_list[i_servo]);
+				error_last_read_ = true;
+				return 0; //個
+			}
+		uint8_t error = (uint8_t)read_data[8 + i_servo*length_a_servo]; // error
+			if ( error != 0) {
+				printf("Fast Sync Read Error(packet error) : id [%d]\n", id);
+				error_last_read_ = true;
+				return 0; //個
+			}
+		// 読み込めたパケットを意味あるデータに変換
+		for(int i_data=0; i_data<dp.size(); i_data++) {
+			data_read_[i_data] = read_data[10 + i_servo*length_a_servo + i_data];
+		}
+		read_id_list[i_servo]  = id;
+		data_int_list[i_servo] = DecodeDataRead(dp.data_type());
+	}
+
+	return num_servo;
+}
+
+
+/** @fn
+ * @brief Dynamixelから複数の情報を同時に読み込む
+ * @param uint8_t servo_id 対象のID
+ * @param vector<DynamixelParameter> dp_list 対象のパラメータのインスタンスの配列
+ * @param int64_t[] data_int_list 読み込んだデータを格納する配列．intに変換済みのもの．
+ * @return (void) 
+ */
+void DynamixelComunicator::RangeRead(uint8_t servo_id, const vector<DynamixelParameter>& dp_list, vector<int64_t>& data_int_list) {
+	// 引数チェック， dp_listとdata_int_listのサイズが一致しているか
+	if (dp_list.size() != data_int_list.size()) {
+		printf("Range Read Error : dp_list.size() != data_int_list.size()\n");
+		return;
+	}
+  // instruction packetを作成
+  DynamixelParameter dp_min = dp_list[0];
+  DynamixelParameter dp_max = dp_list[0];
+  for ( auto dp : dp_list ) {
+	 dp_min = dp_min.address() < dp.address() ? dp_min : dp;
+	 dp_max = dp_max.address() > dp.address() ? dp_max : dp;
+  }
+  auto size_total_dp = dp_max.address() + dp_max.size() - dp_min.address();
+  uint8_t send_data[14] = {0};
+  uint16_t length = 7;
+  send_data[0] = HEADER[0];
+  send_data[1] = HEADER[1];
+  send_data[2] = HEADER[2];
+  send_data[3] = HEADER[3];
+  send_data[4] = servo_id;
+  send_data[5] = length & 0xFF;
+  send_data[6] = (length>>8) & 0xFF;
+  send_data[7] = INSTRUCTION_READ;  // instruction
+  send_data[8] = dp_min.address() & 0xFF;
+  send_data[9] = (dp_min.address()>>8) & 0xFF;
+  send_data[10] = size_total_dp & 0xFF;
+  send_data[11] = (size_total_dp>>8) & 0xFF;
+  uint16_t sum = CalcChecksum(send_data, 12);
+  send_data[12] = sum & 0xFF;
+  send_data[13] = (sum>>8) & 0xFF;
+
+  port_handler_->clearPort();
+  port_handler_->writePort(send_data, 14);
+
+  error_last_read_ = false;
+  port_handler_->setPacketTimeout( uint16_t(11+size_total_dp) );
+  while(port_handler_->getBytesAvailable() < 11+size_total_dp) {
+    if (port_handler_->isPacketTimeout()) {
+      printf("Read Error(time out): ID %d, available bytes %d\n", servo_id, port_handler_->getBytesAvailable());
+      error_last_read_ = true;
+      return;
+    }
+  }
+
+   if (status_return_level_ == 0) return; 
+
+	uint8_t read_data[1023];
+	uint8_t read_length = port_handler_->readPort(read_data, 11+size_total_dp);
+	if (read_length != 11+size_total_dp) {
+		printf("Read Error(no data): ID %d, data_length = %d\n", servo_id, read_length);
+		error_last_read_ = true;
+		return;
+	}
+	if (read_data[0] != HEADER[0] or
+		 read_data[1] != HEADER[1] or
+		 read_data[2] != HEADER[2] or
+		 read_data[3] != HEADER[3] or
+		 read_data[4] != servo_id) {
+		printf("Read Error(header): ID %d\n", servo_id);
+		error_last_read_ = true;
+		return;
+	}
+	uint16_t sum_est = CalcChecksum(read_data, 9+size_total_dp);
+	uint16_t sum_read = uint16_t(read_data[9+size_total_dp]) | uint16_t(read_data[9+size_total_dp+1])<<8;
+	if (sum_est != sum_read) {
+		printf("Read Error(crc): ID %d, est:%d, read:%d\n", servo_id, sum_est, sum_read);
+		error_last_read_ = true;
+		return;
+	}
+
+	// 正常なデータ
+	for (int i_dp=0; i_dp<dp_list.size(); i_dp++) {
+		const DynamixelParameter& dp = dp_list[i_dp];
+		uint8_t index = dp.address() - dp_min.address();
+		for(int i=0; i<dp.size(); i++) {
+			data_read_[i] = read_data[9+index+i];
+		}
+		data_int_list[i_dp] = DecodeDataRead(dp.data_type());
+	}
+
+}
