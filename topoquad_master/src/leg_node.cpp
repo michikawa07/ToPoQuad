@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
 
         if (dyn_msg.ids.size() != 0) {
             pub_dyn_cmd.publish(dyn_msg);
-            ROS_INFO("publish, id size: %d", dyn_msg.ids.size());
+            ROS_INFO("publish, id size: %d", (int)dyn_msg.ids.size());
         }
 
         ros::spinOnce();
