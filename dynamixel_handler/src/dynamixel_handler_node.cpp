@@ -7,6 +7,8 @@
 #include <dynamixel_handler/DynamixelCmd.h>
 #include <dynamixel_handler/DynamixelState.h>
 
+using namespace dyn_x;
+
 std::string DEVICE_NAME;
 int         BAUDRATE;
 int         loop_rate;
@@ -22,10 +24,13 @@ std::vector<uint8_t> id_list;
 std::vector<Dynamixel> dynamixel_chain;
 bool is_updated = false;
 
-// int64_t deg2pulse(double deg) { return deg * 4096.0 / 360.0 + 2048; }
-// double  pulse2deg(int64_t pulse) { return (pulse - 2048 ) * 360.0 / 4096.0; }
-int64_t rad2pulse(double rad) { return rad * 4096.0 / (2.0 * M_PI) + 2048; }
-double  pulse2rad(int64_t pulse) { return (pulse - 2048 ) * 2.0 * M_PI / 4096.0; }
+// ここら変の情報は型番固有の情報なので， dynamixel_parameter.hpp/cpp側に記述して，将来的には自動で読み込ませるようにしたい．
+int64_t rad2pulse(double rad) { return rad * 4096.0 / (2.0*M_PI/*rad*/) + 2048; }
+double  pulse2rad(int64_t pulse) { return (pulse - 2048 ) * (2.0*M_PI/*rad*/) / 4096.0; }
+int64_t mA2pulse(double mA) { return mA / 1.0/*mA*/; }
+double  pulse2mA(int64_t pulse) { return pulse * 1.0/*mA*/; }
+// int64_t rad_s2pulse(double rad_s) { return rad_s * 0.229/*rev/sec*/ / (2.0*M_PI/*rad*/) /*rad/min*/ * 60 /*rad/sec*/; }
+// double  pulse2rad_s(int64_t pulse) { return pulse * 0.229/*rev/sec*/ * (2.0*M_PI/*rad*/) /*rad/min*/ / 60 /*rad/sec*/; }
 
 void FindServo(int id_max) {   
     id_list.clear(); // push_backされれるため， id_listの中身を空にする
@@ -49,30 +54,29 @@ void InitDynamixelChain(int id_max){
 
     // サーボの実体としてのDynamixel Chainの初期化, 今回は一旦すべて位置制御モードにしてトルクON    
     for (auto id : id_list) {
-        dyn_comm.Write(id, torque_enable_x, TORQUE_DISABLE);
-        dyn_comm.Write(id, operating_mode_x, OPERATING_MODE_POSITION);
-        dyn_comm.Write(id, profile_acceleration_x, 500); // 0~32767 数字は適当
-        dyn_comm.Write(id, profile_velocity_x, 100); // 0~32767 数字は適当
-        int present_pos = dyn_comm.Read(id, present_position_x);
-        dyn_comm.Write(id, goal_position_x, present_pos);
-        dyn_comm.Write(id, torque_enable_x, TORQUE_ENABLE);
-        if(dyn_comm.Read(id, torque_enable_x) == TORQUE_DISABLE) ROS_WARN("Servo id [%d] failed to enable torque", id);
+        dyn_comm.Write(id, torque_enable, TORQUE_DISABLE);
+        dyn_comm.Write(id, operating_mode, OPERATING_MODE_POSITION);
+        dyn_comm.Write(id, profile_acceleration, 500); // 0~32767 数字は適当
+        dyn_comm.Write(id, profile_velocity, 100); // 0~32767 数字は適当
+        int present_pos = dyn_comm.Read(id, present_position);
+        dyn_comm.Write(id, goal_position, present_pos);
+        dyn_comm.Write(id, torque_enable, TORQUE_ENABLE);
+        if(dyn_comm.Read(id, torque_enable) == TORQUE_DISABLE) ROS_WARN("Servo id [%d] failed to enable torque", id);
     }
 
     // プログラム内部の変数であるdynamixel_chainの初期化
     dynamixel_chain.resize(id_max);
     std::fill(dynamixel_chain.begin(), dynamixel_chain.end(), Dynamixel{0,0});
     for (auto id : id_list) {
-        dynamixel_chain[id].present_position = dyn_comm.Read(id, present_position_x); // エラー時は0
-        dynamixel_chain[id].goal_position    = dyn_comm.Read(id, goal_position_x);    // エラー時は0
+        dynamixel_chain[id].present_position = dyn_comm.Read(id, present_position); // エラー時は0
+        dynamixel_chain[id].goal_position    = dyn_comm.Read(id, goal_position);    // エラー時は0
     }
 }
 
 void SyncWritePosition(){
-	 //id_list.size()のベクトルを作成
     std::vector<int64_t> data_int_list(id_list.size());
     for (size_t i = 0; i < id_list.size(); i++) data_int_list[i] = dynamixel_chain[id_list[i]].goal_position;
-    dyn_comm.SyncWrite(id_list, goal_position_x, data_int_list);
+    dyn_comm.SyncWrite(id_list, goal_position, data_int_list);
 }
 
 bool SyncReadPosition(){
@@ -81,7 +85,7 @@ bool SyncReadPosition(){
     for (size_t i = 0; i < id_list.size(); i++) data_int_list[i] = dynamixel_chain[id_list[i]].present_position; // read失敗時に初期化されないままだと危険なので．
     for (size_t i = 0; i < id_list.size(); i++) read_id_list[i]  = 255; // あり得ない値(idは0~252)に設定して，read失敗時に検出できるようにする
 
-    int num_success = dyn_comm.SyncRead_fast(id_list, present_position_x, data_int_list, read_id_list);
+    int num_success = dyn_comm.SyncRead_fast(id_list, present_position, data_int_list, read_id_list);
     // エラー処理
     if (num_success != id_list.size()){
         ROS_WARN("SyncReadPosition: %d servo(s) failed to read", (int)(id_list.size() - num_success));
@@ -107,11 +111,11 @@ void ShowDynamixelChain(){
 }
 
 void RebootDynamixel(int id){
-    dyn_comm.Write(id, torque_enable_x, TORQUE_DISABLE);
+    dyn_comm.Write(id, torque_enable, TORQUE_DISABLE);
     dyn_comm.Reboot(id);
     ros::Duration(0.5).sleep();
-    dyn_comm.Write(id, torque_enable_x, TORQUE_ENABLE);
-    if(dyn_comm.Read(id, torque_enable_x) == TORQUE_DISABLE) ROS_WARN("Servo id [%d] failed to enable torque", id);
+    dyn_comm.Write(id, torque_enable, TORQUE_ENABLE);
+    if(dyn_comm.Read(id, torque_enable) == TORQUE_DISABLE) ROS_WARN("Servo id [%d] failed to enable torque", id);
 }
 
 void CallBackOfDynamixelCommand(const dynamixel_handler::DynamixelCmd& msg) {
